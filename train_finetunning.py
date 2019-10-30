@@ -22,6 +22,10 @@ aug = dict(rescale=1./255,featurewise_center=False, rotation_range=40,
            zoom_range=0.3, width_shift_range=0.2, height_shift_range=0.2,
            shear_range=0.15,horizontal_flip=True, fill_mode="nearest")
 
+total_epochs = 30
+epoch_1phase = total_epochs // 2  # training only the final layers
+epoch_2phase = total_epochs - epoch_1phase  # training all layers -- increse the performance.
+
 with h5py.File("dataset/Training/comp_hand_segmentation_data.h5",
                "r") as hdf:
     data = hdf.get("images")
@@ -52,7 +56,22 @@ test_generator = get_segmentation_generator_flow(images[750:], annotations[750:]
 
 
 history = model.fit_generator(train_generator,
-                              epochs=30,
+                              epochs=epoch_1phase,
+                              steps_per_epoch=train_steps,
+                              validation_data=test_generator,
+                              validation_steps=test_steps,
+                              callbacks=build_callbacks(model_dir, model_name),
+                              verbose=1)
+
+history_stats = history.history
+epoch_1phase_end = len(history_stats['val_loss'])
+# Second phase, encoder trainable
+# release all layers for training
+sm.utils.set_trainable(model)
+
+history = model.fit_generator(train_generator,
+                              initial_epoch=epoch_1phase_end,
+                              epochs=epoch_1phase_end + epoch_2phase,
                               steps_per_epoch=train_steps,
                               validation_data=test_generator,
                               validation_steps=test_steps,
