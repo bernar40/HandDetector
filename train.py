@@ -59,8 +59,8 @@ history = model.fit_generator(train_generator,
                               callbacks=build_callbacks(model_dir, model_name),
                               verbose=1)
 
-plt.plot(history.history['jaccard_loss'])
-plt.plot(history.history['val_jaccard_loss'])
+plt.plot(history.history['mean_iou'])
+plt.plot(history.history['val_mean_iou'])
 plt.title('Model accuracy')
 plt.ylabel('Accuracy')
 plt.xlabel('Epoch')
