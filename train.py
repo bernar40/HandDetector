@@ -1,49 +1,72 @@
 from src.models import *
-from src.generators import *
 from src.callbacks import *
 from src.utils.file_paths import *
 from src.utils.loss_acc_curves import *
+from src.generators import *
+import cv2
+import h5py
+import numpy as np
+import segmentation_models as sm
 
 
-batch_size = 32
+batch_size = 8
 target_size = (256, 256)
 
-image_dir = 'dataset/images/'
-mask_dir = 'dataset/masks/'
-img_val_dir = 'dataset/images_val/'
-mask_val_dir = 'dataset/masks_val/'
-model_name = 'hands_1'
-image_files = absoluteFilePaths(image_dir)
-mask_files = absoluteFilePaths(mask_dir)
+model_name = 'hands'
+BACKBONE = 'resnet18'
+model_name += model_name + BACKBONE
 
-move_files_back_to_all(image_dir, mask_dir, img_val_dir, mask_val_dir)
+model_dir = 'models/'
 
-split = int(0.95 * len(image_files))
+aug = dict(rescale=1./255,featurewise_center=False, rotation_range=40,
+           zoom_range=0.3, width_shift_range=0.2, height_shift_range=0.2,
+           shear_range=0.15,horizontal_flip=True, fill_mode="nearest")
 
-# split into training and testing
-img_train_files = image_files[0:split]
-img_test_files = image_files[split:]
-mask_train_files = mask_files[0:split]
-mask_test_files = mask_files[split:]
+with h5py.File("dataset/Training/comp_hand_segmentation_data.h5",
+               "r") as hdf:
+    data = hdf.get("images")
+    images = np.array(data)
 
-move_files_to_val(img_test_files, mask_test_files, img_val_dir, mask_val_dir)
+    data2 = hdf.get("masks")
+    annotations = np.array(data2)
 
-train_generator = get_segmentation_generator(image_dir, mask_dir, target_size, batch_size)
-test_generator = get_segmentation_generator(img_val_dir, mask_val_dir, target_size, batch_size)
+# model = unet2(input_size=(128, 128, 3))
+model = sm.Unet(BACKBONE, classes=1, input_shape=(256, 256, 3))
+model.compile(optimizer=Adam(lr=0.0001), loss=sm.losses.jaccard_loss, metrics=[mean_iou])
 
-model = unet()
-
-train_steps = len(img_train_files) // batch_size
-test_steps = len(mask_train_files) // batch_size
+train_steps = len(images) // batch_size
+test_steps = len(annotations) // batch_size
 
 
-model.fit_generator(train_generator,
-                    epochs=30,
-                    steps_per_epoch=train_steps,
-                    validation_data=test_generator,
-                    validation_steps=test_steps,
-                    callbacks=build_callbacks(model_name),
-                    verbose=0)
+train_generator = get_segmentation_generator_flow(images[:750], annotations[:750],
+                                                  target_size, batch_size,
+                                                  datagen_args=aug, shuffle=True)
+test_generator = get_segmentation_generator_flow(images[750:], annotations[750:],
+                                                 target_size, batch_size,
+                                                 shuffle=False)
 
-show_acc_loss(log=f'models/{model_name}')
-model.save(f'models/{model_name}')
+
+history = model.fit_generator(train_generator,
+                              epochs=30,
+                              steps_per_epoch=train_steps,
+                              validation_data=test_generator,
+                              validation_steps=test_steps,
+                              callbacks=build_callbacks(model_dir, model_name),
+                              verbose=1)
+
+plt.plot(history.history['jaccard_loss'])
+plt.plot(history.history['val_jaccard_loss'])
+plt.title('Model accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()
+
+# Plot training & validation loss values
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()

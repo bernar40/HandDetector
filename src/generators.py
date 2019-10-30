@@ -1,84 +1,138 @@
 from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 from PIL import Image
+import keras
+import cv2
 
-
-def get_segmentation_generator(image_dir, mask_dir, target_size, batch_size, datagen_args=None, seed=2019, shuffle=True):
-    
+def get_segmentation_generator_flow_dir(image_dir, mask_dir, target_size, batch_size, datagen_args=None, seed=2019,
+                               shuffle=True):
     # datagen_args = dict(rescale=1./255,featurewise_center=False)  --> exemplo de datagen_args
     # usado no argumento da funcao
-    
+
     if datagen_args is None:
-        image_datagen = ImageDataGenerator(rescale=1./255)
-        mask_datagen = ImageDataGenerator(rescale=1./255)
+        image_datagen = ImageDataGenerator(rescale=1. / 255)
+        mask_datagen = ImageDataGenerator(rescale=1. / 255)
     else:  # For data augmentation
         image_datagen = ImageDataGenerator(**datagen_args)
         mask_datagen = ImageDataGenerator(**datagen_args)
 
     image_generator = image_datagen.flow_from_directory(
-                image_dir,
-                class_mode=None, 
-                classes=['.'],
-                seed=seed, 
-                batch_size=batch_size,
-                shuffle=shuffle,
-                target_size=target_size,
-                color_mode="rgb")
-    
+        image_dir,
+        class_mode=None,
+        classes=['.'],
+        seed=seed,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        target_size=target_size,
+        color_mode="rgb")
+
     mask_generator = mask_datagen.flow_from_directory(
-                mask_dir,
-                class_mode=None, 
-                classes=['.'],
-                seed=seed, 
-                batch_size=batch_size,
-                shuffle=shuffle,
-                target_size=(256, 256),
-                color_mode="grayscale")
+        mask_dir,
+        class_mode=None,
+        classes=['.'],
+        seed=seed,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        target_size=target_size,
+        color_mode="grayscale")
 
     # Just zip the two generators to get a generator that provides augmented images and masks at the same time
     train_generator = zip(image_generator, mask_generator)
-    
+
     return train_generator
 
 
-def image_generator(files, path_to_mask, path_to_file, batch_size = 32, sz = (256, 256)):
-  
-    while True:
-        # extract a random batch
-        batch = np.random.choice(files, size = batch_size)
+def get_segmentation_generator_flow(images, masks, target_size, batch_size, datagen_args=None, seed=810,
+                               shuffle=True):
 
-        # variables for collecting batches of inputs and outputs
-        batch_x = []
-        batch_y = []
+    # datagen_args = dict(rescale=1./255,featurewise_center=False)  --> exemplo de datagen_args
+    # usado no argumento da funcao
 
-        for f in batch:
+    if datagen_args is None:
+        image_datagen = ImageDataGenerator(rescale=1. / 255)
+        mask_datagen = ImageDataGenerator(rescale=1. / 255)
+    else:  # For data augmentation
+        image_datagen = ImageDataGenerator(**datagen_args)
+        mask_datagen = ImageDataGenerator(**datagen_args)
 
-            # get the masks. Note that masks are png files
-            mask = Image.open(f'{path_to_mask}{f[:-4]}.png')
-            mask = np.array(mask.resize(sz))
+    image_generator = image_datagen.flow(
+        images,
+        seed=seed,
+        batch_size=batch_size,
+        shuffle=shuffle)
 
-            # preprocess the mask
-            mask[mask >= 2] = 0
-            mask[mask != 0 ] = 1
+    mask_generator = mask_datagen.flow(
+        masks,
+        seed=seed,
+        batch_size=batch_size,
+        shuffle=shuffle)
 
-            batch_y.append(mask)
+    # Just zip the two generators to get a generator that provides augmented images and masks at the same time
+    train_generator = zip(image_generator, mask_generator)
 
-            # preprocess the raw images
-            raw = Image.open(f'{path_to_file}{f}')
-            raw = raw.resize(sz)
-            raw = np.array(raw)
+    return train_generator
 
-            # check the number of channels because some of the images are RGBA or GRAY
-            if len(raw.shape) == 2:
-                raw = np.stack((raw,)*3, axis=-1)
-            else:
-                raw = raw[:,:,0:3]
 
-            batch_x.append(raw)
+class DataGenerator(keras.utils.Sequence):
+    def __init__(self, imgs, masks, preprocess_input, aug,
+                 batch_size=32,
+                 dim=(256, 256), shuffle=True
+                 ):
+        # 'Initialization'
+        self.X = imgs
+        self.M = masks
+        self.batch_size = batch_size
+        self.n_classes = 1
+        self.shuffle = shuffle
+        self.preprocess_input = preprocess_input
+        self.aug = aug
+        self.on_epoch_end()
+        self.dim = dim
 
-        # preprocess a batch of images and masks
-        batch_x = np.array(batch_x)/255.
-        batch_y = np.array(batch_y)
-        batch_y = np.expand_dims(batch_y,3)
+    def __len__(self):
+        return int(np.floor((len(self.X) / self.batch_size) / 1))
 
-        yield (batch_x, batch_y)
+    def __getitem__(self, index):
+        indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
+        x, y = self.__data_generation(indexes)
+
+        return x, y
+
+    def on_epoch_end(self):
+        self.indexes = np.arange(len(self.X))
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, indexes):
+        batch_size = len(indexes)
+
+        # Initialization
+        xx = np.empty((batch_size, self.dim[0], self.dim[1], 3), dtype='float32')
+        yy = np.empty((batch_size, self.dim[0], self.dim[1], 1), dtype='float32')
+
+        # Resize Data
+        for i, ID in enumerate(indexes):
+            img = self.X[ID]
+            if img.shape[0] != self.dim[0]:
+                img = cv2.resize(img, self.dim, cv2.INTER_CUBIC)
+            mask = self.M[ID]
+            if mask.shape[0] != self.dim[0]:
+                mask = cv2.resize(mask, self.dim, cv2.INTER_AREA)
+
+            # Augment Images
+            augmented = self.aug(image=img, mask=mask)
+            aug_img = augmented['image']
+            aug_mask = augmented['mask']
+            aug_mask = np.expand_dims(aug_mask, axis=-1)
+            aug_mask = aug_mask / 255
+
+            assert (np.max(aug_mask) <= 1.0 and np.min(aug_mask) >= 0)
+            aug_mask[aug_mask > 0.5] = 1
+            aug_mask[aug_mask < 0.5] = 0
+
+            xx[i, ] = aug_img.astype('float32')
+            yy[i, ] = aug_mask.astype('float32')
+
+        xx = self.preprocess_input(xx)
+
+        return xx, yy
