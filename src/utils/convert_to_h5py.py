@@ -1,11 +1,12 @@
 import numpy as np
 import h5py
 from src.utils.file_paths import *
-import cv2
+from PIL import Image as im
+from matplotlib import pyplot as plt
 
 
-image_dir = '/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/Image/'
-mask_dir = '/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/Annotation'
+image_dir = 'D:/Users/Visagio/Documents/PUC/TCC/HandDetector-master/dataset/Training/Image/'
+mask_dir = 'D:/Users/Visagio/Documents/PUC/TCC/HandDetector-master/dataset/Training/Annotation/'
 
 image_files = sorted([os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith('.jpg')])
 mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith('.png')])
@@ -17,19 +18,26 @@ for i, mask_file in enumerate(mask_files):
     img_file = mask_file.split('.')[0] + '.jpg'
     img_file = img_file.replace('Annotation', 'Image')
 
-    img = cv2.imread(img_file)
-    img = cv2.resize(img, (256, 256), cv2.INTER_CUBIC)
+    img = im.open(img_file)
+    img = img.resize((256, 256))
+    img = np.array(img)
 
-    mask = cv2.imread(mask_file, 0)
-    mask = cv2.resize(mask, (256, 256), cv2.INTER_AREA)
+    mask = im.open(mask_file, )
+    mask = mask.resize((256, 256)).convert('L')
+    mask = np.array(mask)
     mask = np.expand_dims(mask, axis=-1)
 
     xx[i,] = img.astype('float32')
     yy[i,] = mask.astype('float32')
 
+# Create a new HDF5 file
+with h5py.File("../../dataset/Training/hand_segmentation_data.h5", "w") as hdf:
+    # Create a dataset in the file
+    hdf.create_dataset("images", data=xx)
+    hdf.create_dataset("masks", data=yy)
 
 # Create a new HDF5 file
-with h5py.File("/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/comp_hand_segmentation_data.h5", "w") as hdf:
+with h5py.File("../../dataset/Training/comp_hand_segmentation_data.h5", "w") as hdf:
     # Create a dataset in the file
     hdf.create_dataset("images", data=xx, compression="gzip", compression_opts=9)
     hdf.create_dataset("masks", data=yy, compression="gzip", compression_opts=9)
