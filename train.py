@@ -22,7 +22,7 @@ aug = dict(rescale=1./255,featurewise_center=False, rotation_range=40,
            zoom_range=0.3, width_shift_range=0.2, height_shift_range=0.2,
            shear_range=0.15,horizontal_flip=True, fill_mode="nearest")
 
-with h5py.File("dataset/Training/comp_hand_segmentation_data.h5",
+with h5py.File("dataset/Training/bgr_comp_hand_segmentation_data.h5",
                "r") as hdf:
     data = hdf.get("images")
     images = np.array(data)

@@ -1,12 +1,12 @@
 import numpy as np
 import h5py
-from src.utils.file_paths import *
+import os
 from PIL import Image as im
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 
 
-image_dir = 'D:/Users/Visagio/Documents/PUC/TCC/HandDetector-master/dataset/Training/Image/'
-mask_dir = 'D:/Users/Visagio/Documents/PUC/TCC/HandDetector-master/dataset/Training/Annotation/'
+image_dir = '../../dataset/Training/Image/'
+mask_dir = '../../dataset/Training/Annotation/'
 
 image_files = sorted([os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith('.jpg')])
 mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith('.png')])
@@ -31,19 +31,19 @@ for i, mask_file in enumerate(mask_files):
     yy[i,] = mask.astype('float32')
 
 # Create a new HDF5 file
-with h5py.File("../../dataset/Training/hand_segmentation_data.h5", "w") as hdf:
+with h5py.File("/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/hand_segmentation_data.h5", "w") as hdf:
     # Create a dataset in the file
     hdf.create_dataset("images", data=xx)
     hdf.create_dataset("masks", data=yy)
 
 # Create a new HDF5 file
-with h5py.File("../../dataset/Training/comp_hand_segmentation_data.h5", "w") as hdf:
+with h5py.File("/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/comp_hand_segmentation_data.h5", "w") as hdf:
     # Create a dataset in the file
     hdf.create_dataset("images", data=xx, compression="gzip", compression_opts=9)
     hdf.create_dataset("masks", data=yy, compression="gzip", compression_opts=9)
 
 #
-# with h5py.File("/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/comp_hand_segmentation_data.h5",
+# with h5py.File("/Users/bernardoruga/Documents/PUC/TCC/HandDetector/dataset/Training/bgr_comp_hand_segmentation_data.h5",
 #                "r") as hdf:
 #     print(hdf.keys)
 #     data = hdf.get("images")

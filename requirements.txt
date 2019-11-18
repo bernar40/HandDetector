@@ -5,6 +5,6 @@ opencv-python
 keras==2.2.4
 pillow==6.1.0
 tensorflow==1.14.0
-matplotlib==3.1.1
+matplotlib==3.0.3
 pandas==0.24.2
 segmentation-models==0.2.1
